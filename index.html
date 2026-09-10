@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"
+    />
+    <link rel="icon" type="image/png" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="健康档案" />
+    <meta name="theme-color" content="#0d9488" />
+    <title>家庭健康档案</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // 运行时错误直接显示在页面上，方便手机端反馈问题
+      ;(function () {
+        function showErr(msg) {
+          var el = document.getElementById('__err')
+          if (!el) {
+            el = document.createElement('div')
+            el.id = '__err'
+            el.style.cssText =
+              'position:fixed;left:8px;right:8px;bottom:8px;z-index:99999;background:#fee2e2;color:#991b1b;font:12px/1.5 monospace;padding:8px;border-radius:8px;white-space:pre-wrap;word-break:break-all;max-height:40vh;overflow:auto'
+            if (document.body) document.body.appendChild(el)
+          }
+          el.textContent += (el.textContent ? '\n' : '') + String(msg).slice(0, 600)
+        }
+        window.addEventListener('error', function (e) {
+          showErr('错误: ' + (e.message || '脚本加载失败') + (e.filename ? ' @' + e.filename.split('/').pop() : ''))
+        })
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e.reason
+          showErr('Promise: ' + String((r && r.message) || r || '未知'))
+        })
+      })()
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
