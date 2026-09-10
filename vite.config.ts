@@ -23,15 +23,17 @@ export default defineConfig({
         short_name: '健康档案',
         description: '家庭医疗单据的存储、查询、分析与提醒',
         lang: 'zh-CN',
-        start_url: '/',
+        // 相对路径：兼容 GitHub Pages 等子路径部署
+        start_url: '.',
+        scope: './',
         display: 'standalone',
         background_color: '#0d9488',
         theme_color: '#0d9488',
         icons: [
-          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
           {
-            src: '/icons/icon-512-maskable.png',
+            src: 'icons/icon-512-maskable.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
@@ -39,7 +41,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        navigateFallback: '/index.html',
+        navigateFallback: './index.html',
         cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
       },

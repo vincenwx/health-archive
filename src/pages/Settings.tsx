@@ -96,7 +96,13 @@ function MemberModal({ member, onClose }: { member: Member | null; onClose: () =
   const [name, setName] = useState(member?.name ?? '')
   const [relation, setRelation] = useState(member?.relation ?? '本人')
   const [gender, setGender] = useState(member?.gender ?? '')
-  const [birthDate, setBirthDate] = useState(member?.birthDate ?? '')
+  const initBirth = (() => {
+    const m = member?.birthDate?.match(/^(\d{4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?$/)
+    return { y: m?.[1] ?? '', mm: m?.[2] ?? '', d: m?.[3] ?? '' }
+  })()
+  const [birth, setBirth] = useState(initBirth)
+  const setBirthPart = (k: 'y' | 'mm' | 'd', v: string, max: number) =>
+    setBirth((b) => ({ ...b, [k]: v.replace(/\D/g, '').slice(0, max) }))
   const [bloodType, setBloodType] = useState(member?.bloodType ?? '')
   const [allergies, setAllergies] = useState(member?.allergies ?? '')
   const [notes, setNotes] = useState(member?.notes ?? '')
@@ -119,12 +125,26 @@ function MemberModal({ member, onClose }: { member: Member | null; onClose: () =
     }
     setBusy(true)
     try {
+      const by = birth.y.trim()
+      let birthDate: string | undefined
+      if (by) {
+        if (by.length !== 4 || Number(by) < 1900 || Number(by) > 2100) {
+          toast('出生年份需为 4 位数字（如 1981）', 'err')
+          return
+        }
+        const bm = birth.mm ? String(Math.min(12, Math.max(1, Number(birth.mm)))).padStart(2, '0') : ''
+        const bd = birth.d ? String(Math.min(31, Math.max(1, Number(birth.d)))).padStart(2, '0') : ''
+        birthDate = bm ? (bd ? `${by}-${bm}-${bd}` : `${by}-${bm}`) : by
+      } else if (birth.mm || birth.d) {
+        toast('填写了月/日时，出生年份不能为空', 'err')
+        return
+      }
       const row: Member = {
         ...(member?.id ? { id: member.id } : {}),
         name: name.trim(),
         relation,
         gender: gender || undefined,
-        birthDate: birthDate || undefined,
+        birthDate,
         bloodType: bloodType || undefined,
         allergies: allergies.trim() || undefined,
         notes: notes.trim() || undefined,
@@ -180,7 +200,7 @@ function MemberModal({ member, onClose }: { member: Member | null; onClose: () =
             </select>
           </Field>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <Field label="性别">
             <select className={inputCls} value={gender} onChange={(e) => setGender(e.target.value)}>
               <option value="">未填</option>
@@ -188,9 +208,6 @@ function MemberModal({ member, onClose }: { member: Member | null; onClose: () =
                 <option key={g}>{g}</option>
               ))}
             </select>
-          </Field>
-          <Field label="出生日期">
-            <input type="date" className={inputCls} value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
           </Field>
           <Field label="血型">
             <select className={inputCls} value={bloodType} onChange={(e) => setBloodType(e.target.value)}>
@@ -201,6 +218,34 @@ function MemberModal({ member, onClose }: { member: Member | null; onClose: () =
             </select>
           </Field>
         </div>
+        <Field label="出生日期（直接输入，月/日可不填）">
+          <div className="flex items-center gap-1.5">
+            <input
+              inputMode="numeric"
+              className={`${inputCls} w-20 px-2 text-center`}
+              value={birth.y}
+              placeholder="1990"
+              onChange={(e) => setBirthPart('y', e.target.value, 4)}
+            />
+            <span className="text-sm text-stone-500">年</span>
+            <input
+              inputMode="numeric"
+              className={`${inputCls} w-14 px-2 text-center`}
+              value={birth.mm}
+              placeholder="10"
+              onChange={(e) => setBirthPart('mm', e.target.value, 2)}
+            />
+            <span className="text-sm text-stone-500">月</span>
+            <input
+              inputMode="numeric"
+              className={`${inputCls} w-14 px-2 text-center`}
+              value={birth.d}
+              placeholder="30"
+              onChange={(e) => setBirthPart('d', e.target.value, 2)}
+            />
+            <span className="text-sm text-stone-500">日</span>
+          </div>
+        </Field>
         <Field label="过敏史">
           <input
             className={inputCls}
