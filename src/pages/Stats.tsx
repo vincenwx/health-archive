@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
+import { Loader2, Sparkles } from 'lucide-react'
 import {
   CATEGORY_GROUPS,
   db,
@@ -11,7 +12,8 @@ import {
   type Visit,
 } from '../db'
 import { fmtMoney } from '../lib/format'
-import { MemberChips, PageHeader } from '../components/ui'
+import { AiConfig, DEFAULT_AI, analyzeIndicator } from '../lib/ai'
+import { MemberChips, PageHeader, toast } from '../components/ui'
 
 const docGroup = (c: DocCategory): string =>
   CATEGORY_GROUPS.find((g) => g.cats.includes(c))?.group ?? '其他'
@@ -33,11 +35,18 @@ function parseRef(s?: string): { min: number; max: number } | null {
   return min < max ? { min, max } : null
 }
 
+interface SavedAnalysis {
+  text: string
+  at: number
+  model?: string
+}
+
 export default function StatsPage() {
   const members = useLiveQuery(() => db.members.toArray(), []) ?? []
   const activeId = useLiveQuery(() => getSetting<number | null>('activeMemberId', null), [])
   const [memberFilter, setMemberFilter] = useState<number | 'all' | null>(null)
   const [year, setYear] = useState<number | 'all'>(new Date().getFullYear())
+  const [spendingDetail, setSpendingDetail] = useState(false)
 
   useEffect(() => {
     if (memberFilter === null && activeId !== undefined) setMemberFilter(activeId ?? 'all')
@@ -45,6 +54,9 @@ export default function StatsPage() {
 
   const docs = useLiveQuery(() => db.docs.toArray(), []) ?? []
   const visits = useLiveQuery(() => db.visits.toArray(), []) ?? []
+
+  const memberName = (id: number | 'all') =>
+    id === 'all' ? '全家' : (members.find((m) => m.id === id)?.name ?? '—')
 
   const filteredDocs = useMemo(
     () =>
@@ -59,59 +71,7 @@ export default function StatsPage() {
     [visits, memberFilter],
   )
 
-  // ---------- 花费统计 ----------
-  const amountDocs = filteredDocs.filter((d) => d.amount != null)
-  const yearDocs = amountDocs.filter((d) => year === 'all' || d.docDate.startsWith(String(year)))
-  const totalAmount = yearDocs.reduce((s, d) => s + (d.amount ?? 0), 0)
-  const totalSelf = yearDocs.reduce((s, d) => s + (d.selfPaid ?? 0), 0)
-
-  const monthly = useMemo(() => {
-    const arr = Array.from({ length: 12 }, (_, i) => ({ label: `${i + 1}月`, total: 0, self: 0 }))
-    if (year === 'all') {
-      // 全部时按年汇总成几根柱子
-      const byYear = new Map<string, { total: number; self: number }>()
-      for (const d of amountDocs) {
-        const y = d.docDate.slice(0, 4)
-        const cur = byYear.get(y) ?? { total: 0, self: 0 }
-        cur.total += d.amount ?? 0
-        cur.self += d.selfPaid ?? 0
-        byYear.set(y, cur)
-      }
-      return [...byYear.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([y, v]) => ({
-        label: `${y}年`,
-        total: v.total,
-        self: v.self,
-      }))
-    }
-    for (const d of yearDocs) {
-      const m = Number(d.docDate.slice(5, 7)) - 1
-      if (m >= 0 && m < 12) {
-        arr[m].total += d.amount ?? 0
-        arr[m].self += d.selfPaid ?? 0
-      }
-    }
-    return arr
-  }, [amountDocs, yearDocs, year])
-
-  const byGroup = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const d of yearDocs) {
-      const g = docGroup(d.category)
-      map.set(g, (map.get(g) ?? 0) + (d.amount ?? 0))
-    }
-    return [...map.entries()].sort((a, b) => b[1] - a[1])
-  }, [yearDocs])
-
-  const byHospital = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const d of yearDocs) {
-      const h = d.hospital?.trim() || '未填医院'
-      map.set(h, (map.get(h) ?? 0) + (d.amount ?? 0))
-    }
-    return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
-  }, [yearDocs])
-
-  // ---------- 指标趋势 ----------
+  // ---------- 指标趋势 + AI 分析 ----------
   interface IndicatorPoint {
     name: string
     value: number
@@ -142,6 +102,105 @@ export default function StatsPage() {
     [indicatorPoints, activeIndicator],
   )
 
+  const analysisKey =
+    memberFilter != null && activeIndicator ? `ind-analysis:${String(memberFilter)}:${activeIndicator}` : null
+  const [analysis, setAnalysis] = useState<SavedAnalysis | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setAnalysis(null)
+    setAnalysisError(null)
+    if (!analysisKey) return
+    db.settings
+      .get(analysisKey)
+      .then((row) => {
+        const v = row?.value as SavedAnalysis | undefined
+        if (v?.text) setAnalysis(v)
+      })
+      .catch(() => {})
+  }, [analysisKey])
+
+  const runAnalysis = async () => {
+    const cfg = (await getSetting<AiConfig>('aiConfig', DEFAULT_AI)) as AiConfig
+    if (!cfg.apiKey) {
+      toast('请先在设置中配置 AI Key', 'err')
+      return
+    }
+    if (!activeIndicator || series.length === 0) return
+    setAnalyzing(true)
+    setAnalysisError(null)
+    try {
+      const text = await analyzeIndicator(
+        cfg,
+        memberName(memberFilter ?? 'all'),
+        activeIndicator,
+        series.map((p) => ({ date: p.date, value: p.value, unit: p.unit, reference: p.reference, flag: p.flag })),
+      )
+      const saved: SavedAnalysis = { text, at: Date.now(), model: cfg.model }
+      if (analysisKey) await db.settings.put({ key: analysisKey, value: saved })
+      setAnalysis(saved)
+      toast('分析完成')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setAnalysisError(msg)
+      toast('分析失败：' + msg, 'err')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  // ---------- 花费统计 ----------
+  const amountDocs = filteredDocs.filter((d) => d.amount != null)
+  const yearDocs = amountDocs.filter((d) => year === 'all' || d.docDate.startsWith(String(year)))
+  const totalAmount = yearDocs.reduce((s, d) => s + (d.amount ?? 0), 0)
+  const totalSelf = yearDocs.reduce((s, d) => s + (d.selfPaid ?? 0), 0)
+
+  const monthly = useMemo(() => {
+    if (year === 'all') {
+      const byYear = new Map<string, { total: number; self: number }>()
+      for (const d of amountDocs) {
+        const y = d.docDate.slice(0, 4)
+        const cur = byYear.get(y) ?? { total: 0, self: 0 }
+        cur.total += d.amount ?? 0
+        cur.self += d.selfPaid ?? 0
+        byYear.set(y, cur)
+      }
+      return [...byYear.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([y, v]) => ({
+        label: `${y}年`,
+        total: v.total,
+        self: v.self,
+      }))
+    }
+    const arr = Array.from({ length: 12 }, (_, i) => ({ label: `${i + 1}月`, total: 0, self: 0 }))
+    for (const d of yearDocs) {
+      const m = Number(d.docDate.slice(5, 7)) - 1
+      if (m >= 0 && m < 12) {
+        arr[m].total += d.amount ?? 0
+        arr[m].self += d.selfPaid ?? 0
+      }
+    }
+    return arr
+  }, [amountDocs, yearDocs, year])
+
+  const byGroup = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const d of yearDocs) {
+      const g = docGroup(d.category)
+      map.set(g, (map.get(g) ?? 0) + (d.amount ?? 0))
+    }
+    return [...map.entries()].sort((a, b) => b[1] - a[1])
+  }, [yearDocs])
+
+  const byHospital = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const d of yearDocs) {
+      const h = d.hospital?.trim() || '未填医院'
+      map.set(h, (map.get(h) ?? 0) + (d.amount ?? 0))
+    }
+    return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
+  }, [yearDocs])
+
   if (memberFilter === null) return null
 
   return (
@@ -155,76 +214,8 @@ export default function StatsPage() {
         />
       </div>
 
-      {/* ---------- 花费统计 ---------- */}
-      <section className="mt-4">
-        <div className="mb-2 flex items-center justify-between px-4">
-          <span className="text-[15px] font-semibold">医疗花费</span>
-          <div className="flex gap-1.5">
-            {[
-              { v: new Date().getFullYear(), label: '今年' },
-              { v: new Date().getFullYear() - 1, label: '去年' },
-              { v: 'all' as const, label: '全部' },
-            ].map((o) => (
-              <button
-                key={o.label}
-                onClick={() => setYear(o.v)}
-                className={`rounded-full px-2.5 py-1 text-xs ${
-                  year === o.v ? 'bg-teal-600 font-medium text-white' : 'border border-stone-200 bg-white text-stone-600'
-                }`}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="px-4">
-          <div className="grid grid-cols-3 gap-3">
-            <StatCard label="总支出" value={fmtMoney(totalAmount)} strong />
-            <StatCard label="其中自付" value={fmtMoney(totalSelf)} />
-            <StatCard label="计费单据" value={`${yearDocs.length} 张`} />
-          </div>
-
-          {/* 月度/年度柱状 */}
-          {monthly.length > 0 && (
-            <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
-              <div className="mb-3 text-[13px] font-medium text-stone-500">
-                {year === 'all' ? '历年支出' : '月度支出'}（总额，柱内深色为自付）
-              </div>
-              <BarChart data={monthly.map((m) => ({ label: m.label, value: m.total, sub: m.self }))} />
-            </div>
-          )}
-
-          {/* 类型分布 */}
-          {byGroup.length > 0 && (
-            <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
-              <div className="mb-3 text-[13px] font-medium text-stone-500">按单据类别（体检与就诊分开统计）</div>
-              <HBarList
-                items={byGroup.map(([label, v]) => ({ label, value: v, display: fmtMoney(v) }))}
-                max={Math.max(...byGroup.map((x) => x[1]))}
-              />
-            </div>
-          )}
-
-          {/* 医院分布 */}
-          {byHospital.length > 0 && (
-            <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
-              <div className="mb-3 text-[13px] font-medium text-stone-500">医院分布 Top{byHospital.length}</div>
-              <HBarList
-                items={byHospital.map(([label, v]) => ({ label, value: v, display: fmtMoney(v) }))}
-                max={Math.max(...byHospital.map((x) => x[1]))}
-              />
-            </div>
-          )}
-          {yearDocs.length === 0 && (
-            <div className="rounded-2xl bg-white p-5 text-sm text-stone-400 shadow-sm">
-              该范围内没有带金额的单据（录入发票/清单时填写金额即可统计）
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* ---------- 指标趋势 ---------- */}
-      <section className="mt-6">
+      {/* ---------- 指标趋势（重点） ---------- */}
+      <section className="mt-3">
         <div className="mb-2 px-4">
           <span className="text-[15px] font-semibold">健康指标趋势</span>
         </div>
@@ -254,7 +245,139 @@ export default function StatsPage() {
                 series={series.filter((p) => p.name === activeIndicator)}
                 name={activeIndicator ?? ''}
               />
+
+              {/* AI 分析 */}
+              <div className="mt-3 border-t border-stone-100 pt-3">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-[13px] font-medium text-stone-600">
+                    <Sparkles size={14} className="text-teal-600" /> AI 分析趋势
+                  </span>
+                  {analysis && (
+                    <button
+                      onClick={runAnalysis}
+                      disabled={analyzing}
+                      className="flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700 active:bg-teal-200 disabled:opacity-60"
+                    >
+                      {analyzing && <Loader2 size={12} className="animate-spin" />}
+                      {analyzing ? '分析中…' : '重新分析'}
+                    </button>
+                  )}
+                </div>
+                {analysis ? (
+                  <>
+                    <p
+                      className={`mt-2 whitespace-pre-wrap text-sm leading-6 text-stone-700 ${
+                        analyzing ? 'opacity-40' : ''
+                      }`}
+                    >
+                      {analysis.text}
+                    </p>
+                    {analyzing && (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-teal-700">
+                        <Loader2 size={13} className="animate-spin" />
+                        正在分析，约需 10~30 秒…
+                      </div>
+                    )}
+                    <p className="mt-2 text-xs text-stone-400">
+                      生成于 {fmtDateTimeSafe(analysis.at)} · 仅基于检测记录 · AI 仅供参考，请以医生意见为准
+                    </p>
+                  </>
+                ) : (
+                  <div className="mt-2">
+                    <button
+                      onClick={runAnalysis}
+                      disabled={analyzing}
+                      className="flex items-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-700 active:bg-teal-100 disabled:opacity-60"
+                    >
+                      {analyzing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                      {analyzing ? '分析中…' : 'AI 分析趋势与建议'}
+                    </button>
+                    <p className="mt-2 text-xs text-stone-400">
+                      基于该指标的全部历史检测记录，给出趋势判断、当前状态与复查/生活建议
+                    </p>
+                  </div>
+                )}
+                {analysisError && (
+                  <p className="mt-3 whitespace-pre-wrap rounded-xl bg-rose-50 p-3 text-xs leading-5 text-rose-600">
+                    分析失败：{analysisError}
+                  </p>
+                )}
+              </div>
             </div>
+          )}
+        </div>
+      </section>
+
+      {/* ---------- 花费统计（精简） ---------- */}
+      <section className="mt-6">
+        <div className="mb-2 flex items-center justify-between px-4">
+          <span className="text-[15px] font-semibold">医疗花费</span>
+          <div className="flex gap-1.5">
+            {[
+              { v: new Date().getFullYear(), label: '今年' },
+              { v: new Date().getFullYear() - 1, label: '去年' },
+              { v: 'all' as const, label: '全部' },
+            ].map((o) => (
+              <button
+                key={o.label}
+                onClick={() => setYear(o.v)}
+                className={`rounded-full px-2.5 py-1 text-xs ${
+                  year === o.v ? 'bg-teal-600 font-medium text-white' : 'border border-stone-200 bg-white text-stone-600'
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="px-4">
+          <div className="grid grid-cols-3 gap-3">
+            <StatCard label="总支出" value={fmtMoney(totalAmount)} strong />
+            <StatCard label="其中自付" value={fmtMoney(totalSelf)} />
+            <StatCard label="计费单据" value={`${yearDocs.length} 张`} />
+          </div>
+
+          {monthly.length > 0 && (
+            <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
+              <div className="mb-3 text-[13px] font-medium text-stone-500">
+                {year === 'all' ? '历年支出' : '月度支出'}（柱内深色为自付）
+              </div>
+              <BarChart data={monthly.map((m) => ({ label: m.label, value: m.total, sub: m.self }))} />
+            </div>
+          )}
+          {yearDocs.length === 0 && (
+            <div className="rounded-2xl bg-white p-5 text-sm text-stone-400 shadow-sm">
+              该范围内没有带金额的单据（录入发票/清单时填写金额即可统计）
+            </div>
+          )}
+
+          <button
+            onClick={() => setSpendingDetail((v) => !v)}
+            className="mt-3 w-full rounded-2xl bg-white py-2.5 text-xs font-medium text-teal-600 shadow-sm active:bg-stone-100"
+          >
+            {spendingDetail ? '收起类别 / 医院分布 ▴' : '查看类别 / 医院分布 ▾'}
+          </button>
+          {spendingDetail && (
+            <>
+              {byGroup.length > 0 && (
+                <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
+                  <div className="mb-3 text-[13px] font-medium text-stone-500">按单据类别（体检与就诊分开统计）</div>
+                  <HBarList
+                    items={byGroup.map(([label, v]) => ({ label, value: v, display: fmtMoney(v) }))}
+                    max={Math.max(...byGroup.map((x) => x[1]))}
+                  />
+                </div>
+              )}
+              {byHospital.length > 0 && (
+                <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
+                  <div className="mb-3 text-[13px] font-medium text-stone-500">医院分布 Top{byHospital.length}</div>
+                  <HBarList
+                    items={byHospital.map(([label, v]) => ({ label, value: v, display: fmtMoney(v) }))}
+                    max={Math.max(...byHospital.map((x) => x[1]))}
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
       </section>
@@ -274,6 +397,12 @@ export default function StatsPage() {
       </section>
     </div>
   )
+}
+
+function fmtDateTimeSafe(ts: number): string {
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
 // ---------- 小组件 ----------
@@ -412,13 +541,7 @@ function IndicatorChart({
             </text>
           </>
         )}
-        <polyline
-          points={polyline}
-          fill="none"
-          stroke="#0d9488"
-          strokeWidth="2"
-          strokeLinejoin="round"
-        />
+        <polyline points={polyline} fill="none" stroke="#0d9488" strokeWidth="2" strokeLinejoin="round" />
         {series.map((p, i) => {
           const abnormal = p.flag && p.flag !== '正常'
           return (

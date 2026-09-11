@@ -222,6 +222,48 @@ function parseInterpretation(text: string): string {
   return s.trim()
 }
 
+export interface IndicatorRow {
+  date: string
+  value: number
+  unit?: string
+  reference?: string
+  flag?: string
+}
+
+const INDICATOR_SYSTEM = `你是健康指标分析助手，面向普通家庭用户。用户会提供某一项健康指标（如空腹血糖、糖化血红蛋白、低密度脂蛋白胆固醇）的历次检测记录。请输出一份通俗易懂的分析：
+【趋势判断】结合首末数值和中间变化，判断整体趋势（上升/下降/平稳/波动），引用具体日期和数值
+【当前状态】最新数值相对参考区间的位置（正常/略高/偏高/略低/偏低），用白话解释这个指标反映什么、当前水平可能意味着什么
+【建议】分点列出（每条以"·"开头）：
+· 复查：是否需要复查、建议多久后、复查前注意事项（如需空腹）
+· 生活：结合该指标的饮食、运动、作息建议
+· 就医：出现什么情况应当及时就医
+要求：只基于提供的记录分析，不编造；只有一次记录时重点讲当前状态与复查建议；结尾固定单独一行「以上为 AI 分析，仅供参考，请以医生意见为准。」；全文 500 字以内；直接输出分析正文，不要 JSON、不要代码块、不要开场白，段落间空一行。`
+
+/** 指标趋势 AI 分析（纯文本输出） */
+export async function analyzeIndicator(
+  cfg: AiConfig,
+  memberName: string,
+  indicatorName: string,
+  rows: IndicatorRow[],
+): Promise<string> {
+  const lines = rows.map(
+    (r) => `${r.date}  ${r.value}${r.unit ?? ''}  参考:${r.reference ?? '未显示'}${r.flag ? `  [${r.flag}]` : ''}`,
+  )
+  const text = await chatCompletion(
+    cfg,
+    [
+      { role: 'system', content: INDICATOR_SYSTEM },
+      {
+        role: 'user',
+        content: `成员：${memberName}\n指标：${indicatorName}\n历次记录（从早到晚）：\n${lines.join('\n')}\n\n请按系统要求分析。`,
+      },
+    ],
+    4000,
+    true,
+  )
+  return parseInterpretation(text)
+}
+
 function pickString(v: unknown): string | undefined {
   if (typeof v !== 'string') return undefined
   const s = v.trim()
