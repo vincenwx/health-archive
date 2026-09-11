@@ -20,6 +20,7 @@ export default function VisitDetailPage() {
   const navigate = useNavigate()
   const [linking, setLinking] = useState(false)
   const [interpreting, setInterpreting] = useState(false)
+  const [interpretError, setInterpretError] = useState<string | null>(null)
 
   const visit = useLiveQuery(async () => (id ? db.visits.get(Number(id)) : undefined), [id])
   const member = useLiveQuery(
@@ -98,6 +99,7 @@ export default function VisitDetailPage() {
       return
     }
     setInterpreting(true)
+    setInterpretError(null)
     try {
       const images = await collectImageDataUrls(
         allDocs.flatMap((d) => d.fileIds),
@@ -134,7 +136,9 @@ export default function VisitDetailPage() {
       })
       toast('综合解读完成')
     } catch (e) {
-      toast('解读失败：' + (e instanceof Error ? e.message : String(e)), 'err')
+      const msg = e instanceof Error ? e.message : String(e)
+      setInterpretError(msg)
+      toast('解读失败：' + msg, 'err')
     } finally {
       setInterpreting(false)
     }
@@ -225,6 +229,13 @@ export default function VisitDetailPage() {
                   : '先关联单据，才能综合解读'}
               </span>
             </div>
+          )}
+          {interpretError && (
+            <p className="mt-3 whitespace-pre-wrap rounded-xl bg-rose-50 p-3 text-xs leading-5 text-rose-600">
+              解读失败：{interpretError}
+              <br />
+              （可重试；若持续失败请截图此文字反馈）
+            </p>
           )}
         </div>
 

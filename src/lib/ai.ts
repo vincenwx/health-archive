@@ -1,17 +1,18 @@
 // 视觉大模型单据识别客户端（OpenAI 兼容接口，默认智谱 GLM）
 import dayjs from 'dayjs'
 import { db, fileBlob, ALL_CATEGORIES, type DocCategory, type LabIndicator, type MedItem } from '../db'
+import { toAiImage } from './image'
 
 /** 单次送给模型解读的图片上限 */
 export const MAX_INTERPRET_IMAGES = 20
 
-/** 收集一批附件里的图片并转为 data URL（跳过 PDF 等非图片） */
+/** 收集一批附件里的图片并转为 data URL（跳过 PDF 等非图片；先压缩控制请求体积） */
 export async function collectImageDataUrls(fileIds: string[], cap = MAX_INTERPRET_IMAGES): Promise<string[]> {
   const out: string[] = []
   for (const fid of fileIds) {
     if (out.length >= cap) break
     const f = await db.files.get(fid)
-    if (f && f.mime.startsWith('image/')) out.push(await blobToDataUrl(fileBlob(f)))
+    if (f && f.mime.startsWith('image/')) out.push(await blobToDataUrl(await toAiImage(fileBlob(f))))
   }
   return out
 }

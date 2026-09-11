@@ -12,7 +12,7 @@ import {
   type MedDoc,
 } from '../db'
 import { today, fmtSize, parseAmount } from '../lib/format'
-import { blobToArrayBuffer, normalizeFile } from '../lib/image'
+import { blobToArrayBuffer, normalizeFile, toAiImage } from '../lib/image'
 import { newId } from '../lib/crypto'
 import {
   DEFAULT_AI,
@@ -238,7 +238,7 @@ export default function DocFormPage() {
     try {
       for (let i = 0; i < images.length; i++) {
         setAiInfo(`识别中 第 ${i + 1}/${images.length} 张…`)
-        const dataUrl = await blobToDataUrl(images[i].blob)
+        const dataUrl = await blobToDataUrl(await toAiImage(images[i].blob))
         const r = await recognizeDocument(cfg, dataUrl)
         setRecognResults((prev) => ({ ...prev, [images[i].key]: r }))
         const hit = applyExtract(r)

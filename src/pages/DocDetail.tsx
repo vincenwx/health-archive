@@ -19,6 +19,7 @@ export default function DocDetailPage() {
   const navigate = useNavigate()
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [interpreting, setInterpreting] = useState(false)
+  const [interpretError, setInterpretError] = useState<string | null>(null)
 
   const doc = useLiveQuery(async () => (id ? db.docs.get(Number(id)) : undefined), [id])
   const member = useLiveQuery(
@@ -48,6 +49,7 @@ export default function DocDetailPage() {
       return
     }
     setInterpreting(true)
+    setInterpretError(null)
     try {
       // 多页单据：把所有图片一起发给模型综合解读（最多 20 张）
       const images = await collectImageDataUrls(doc.fileIds, MAX_INTERPRET_IMAGES)
@@ -84,7 +86,9 @@ export default function DocDetailPage() {
       })
       toast('解读完成')
     } catch (e) {
-      toast('解读失败：' + (e instanceof Error ? e.message : String(e)), 'err')
+      const msg = e instanceof Error ? e.message : String(e)
+      setInterpretError(msg)
+      toast('解读失败：' + msg, 'err')
     } finally {
       setInterpreting(false)
     }
@@ -192,7 +196,7 @@ export default function DocDetailPage() {
               </p>
               <p className="mt-2 text-xs text-stone-400">
                 生成于 {doc.aiMeta.interpretationAt ? fmtDateTime(doc.aiMeta.interpretationAt) : '—'} · AI
-                仅供参考，请以医生意见为准
+                归纳整理，仅供参考，请以医生意见为准
               </p>
             </>
           ) : (
@@ -205,8 +209,15 @@ export default function DocDetailPage() {
                 {interpreting ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
                 {interpreting ? '解读中…' : '生成 AI 解读'}
               </button>
-              <span className="text-xs text-stone-400">把单据讲成大白话：关键结果、用药、注意事项</span>
+              <span className="text-xs text-stone-400">归纳整理全部内容，总结并给出建议</span>
             </div>
+          )}
+          {interpretError && (
+            <p className="mt-3 whitespace-pre-wrap rounded-xl bg-rose-50 p-3 text-xs leading-5 text-rose-600">
+              解读失败：{interpretError}
+              <br />
+              （可重试；若持续失败请截图此文字反馈）
+            </p>
           )}
         </div>
 

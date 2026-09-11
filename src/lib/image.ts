@@ -91,3 +91,27 @@ export async function normalizeFile(file: File): Promise<NormalizedFile> {
   }
   return { blob: file, mime: file.type || 'application/octet-stream', name: file.name || '未命名' }
 }
+
+/** 送给 AI 前的图片压缩：最长边 1280px JPEG，减小请求体积、节省 token */
+export async function toAiImage(blob: Blob): Promise<Blob> {
+  try {
+    const dec = await decodeImage(blob)
+    if (!dec || !dec.w || !dec.h) return blob
+    if (Math.max(dec.w, dec.h) <= 1280 && blob.size < 300 * 1024) return blob
+    const scale = Math.min(1, 1280 / Math.max(dec.w, dec.h))
+    const w = Math.max(1, Math.round(dec.w * scale))
+    const h = Math.max(1, Math.round(dec.h * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return blob
+    dec.draw(ctx, w, h)
+    const out = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.8),
+    )
+    return out ?? blob
+  } catch {
+    return blob
+  }
+}
