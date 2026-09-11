@@ -346,6 +346,11 @@ export default function DocFormPage() {
         const mergedNote = results.map((r) => r.note).filter(Boolean).join('\n')
         const meds = dedupeByName(results.flatMap((r) => r.medications ?? []))
         const inds = dedupeByName(results.flatMap((r) => r.indicators ?? []))
+        // 标题兜底：识别名称 > 「诊断+类型」，保证辨识度
+        const firstDocName = results.map((r) => r.docName).find(Boolean)
+        const diagFirst = (mergedDiag || draft.diagnosis).split(/[；;]/)[0].trim().slice(0, 12)
+        const fallbackTitle =
+          firstDocName ?? (diagFirst ? `${diagFirst}${draft.category}`.slice(0, 20) : draft.category)
         const bucketAiMeta: AiMeta =
           editing && (aiMeta || old?.aiMeta)
             ? (aiMeta ?? old!.aiMeta!)
@@ -361,10 +366,7 @@ export default function DocFormPage() {
           memberId: Number(draft.memberId),
           visitId: undefined,
           category: pick('category') ?? draft.category,
-          title:
-            draft.title.trim() ||
-            results.map((r) => r.docName).find(Boolean) ||
-            draft.category,
+          title: draft.title.trim() || fallbackTitle,
           docDate: date,
           hospital: (pick('hospital') ?? draft.hospital.trim()) || undefined,
           department: (pick('department') ?? draft.department.trim()) || undefined,
@@ -579,7 +581,7 @@ export default function DocFormPage() {
               className={inputCls}
               value={draft.title}
               onChange={(e) => set('title', e.target.value)}
-              placeholder="留空则用识别到的单据名称或类型"
+              placeholder="留空则自动取「诊断+类型」或识别名称"
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
