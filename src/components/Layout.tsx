@@ -1,5 +1,5 @@
 import { NavLink, Route, Routes } from 'react-router-dom'
-import { FileText, Home, Settings as SettingsIcon, Stethoscope } from 'lucide-react'
+import { Bell, FileText, Home, Settings as SettingsIcon, Stethoscope } from 'lucide-react'
 import { ToastHost } from './ui'
 import HomePage from '../pages/Home'
 import DocumentsPage from '../pages/Documents'
@@ -8,12 +8,16 @@ import DocDetailPage from '../pages/DocDetail'
 import VisitsPage from '../pages/Visits'
 import VisitFormPage from '../pages/VisitForm'
 import VisitDetailPage from '../pages/VisitDetail'
+import RemindersPage from '../pages/Reminders'
+import MedPlanFormPage from '../pages/MedPlanForm'
+import ReminderFormPage from '../pages/ReminderForm'
 import SettingsPage from '../pages/Settings'
 
 const NAV_ITEMS = [
   { to: '/', label: '首页', icon: Home },
   { to: '/docs', label: '单据', icon: FileText },
   { to: '/visits', label: '就诊', icon: Stethoscope },
+  { to: '/reminders', label: '提醒', icon: Bell },
   { to: '/settings', label: '设置', icon: SettingsIcon },
 ]
 
@@ -53,6 +57,11 @@ export function Layout() {
           <Route path="/visits/new" element={<VisitFormPage />} />
           <Route path="/visits/:id" element={<VisitDetailPage />} />
           <Route path="/visits/:id/edit" element={<VisitFormPage />} />
+          <Route path="/reminders" element={<RemindersPage />} />
+          <Route path="/plans/new" element={<MedPlanFormPage />} />
+          <Route path="/plans/:id/edit" element={<MedPlanFormPage />} />
+          <Route path="/reminders/new" element={<ReminderFormPage />} />
+          <Route path="/reminders/:id/edit" element={<ReminderFormPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<HomePage />} />
         </Routes>

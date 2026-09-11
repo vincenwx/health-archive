@@ -2,7 +2,7 @@ import Dexie, { type Table } from 'dexie'
 
 export const APP_NAME = 'family-health-archive'
 export const APP_TITLE = '家庭健康档案'
-export const APP_VERSION = '0.3.5 (M2)'
+export const APP_VERSION = '0.4.0 (M3)'
 export const SCHEMA_VERSION = 1
 
 // ---------- 实体类型 ----------
@@ -167,6 +167,52 @@ export interface Setting {
   value: unknown
 }
 
+// ---------- 提醒中心（M3） ----------
+
+export type ReminderKind = '复诊' | '复查' | '疫苗体检'
+export const REMINDER_KINDS: ReminderKind[] = ['复诊', '复查', '疫苗体检']
+
+/** 用药计划：一次一药，按时间点提醒 */
+export interface MedPlan {
+  id?: number
+  memberId: number
+  name: string // 药名
+  dosage?: string // 每次剂量，如 0.5g
+  timing?: string // 餐前/餐后/睡前等
+  timesPerDay: number // 每日次数
+  times: string[] // 具体时间点 ["08:00","12:30","20:00"]，长度 = timesPerDay
+  startDate: string // YYYY-MM-DD
+  days: number // 连用天数
+  sourceDocId?: number // 来源处方单据
+  note?: string
+  active: 1 | 0 // 1 进行中 0 已结束
+  createdAt: number
+}
+
+/** 复诊/复查/疫苗体检等日程提醒 */
+export interface MedReminder {
+  id?: number
+  memberId: number
+  kind: ReminderKind
+  title: string
+  date: string // YYYY-MM-DD
+  time?: string // HH:MM
+  note?: string
+  sourceDocId?: number
+  done: 1 | 0
+  createdAt: number
+}
+
+/** 服药打卡记录 */
+export interface MedLog {
+  id?: number
+  planId: number
+  memberId: number
+  date: string // YYYY-MM-DD
+  time: string // 计划时间点 HH:MM
+  ts: number // 实际打卡时间戳
+}
+
 // ---------- 数据库 ----------
 
 class AppDB extends Dexie {
@@ -175,6 +221,9 @@ class AppDB extends Dexie {
   docs!: Table<MedDoc, number>
   files!: Table<ArchiveFile, string>
   settings!: Table<Setting, string>
+  medPlans!: Table<MedPlan, number>
+  reminders!: Table<MedReminder, number>
+  medLogs!: Table<MedLog, number>
 
   constructor() {
     super(APP_NAME)
@@ -184,6 +233,12 @@ class AppDB extends Dexie {
       docs: '++id, memberId, visitId, category, docDate, [memberId+docDate]',
       files: 'id, docId',
       settings: 'key',
+    })
+    // M3 提醒中心
+    this.version(2).stores({
+      medPlans: '++id, memberId, active, sourceDocId',
+      reminders: '++id, memberId, kind, date, done, [memberId+done]',
+      medLogs: '++id, planId, date',
     })
   }
 }

@@ -1,8 +1,17 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
-import { CalendarPlus, Camera, ChevronRight, UserPlus } from 'lucide-react'
-import { db, getSetting, APP_VERSION, VISIT_TYPE_STYLE, type MedDoc, type Visit } from '../db'
-import { fmtDate, fmtMoney } from '../lib/format'
+import { CalendarPlus, Bell, Camera, ChevronRight, UserPlus } from 'lucide-react'
+import {
+  db,
+  getSetting,
+  APP_VERSION,
+  VISIT_TYPE_STYLE,
+  type MedDoc,
+  type MedPlan,
+  type Visit,
+} from '../db'
+import { today, fmtDate, fmtMoney } from '../lib/format'
+import { addDays, planEndDate } from '../lib/medParse'
 import { MemberChips, PageHeader } from '../components/ui'
 import { DocThumb } from '../components/doc'
 
@@ -23,6 +32,25 @@ export default function HomePage() {
     all.sort((a, b) => b.createdAt - a.createdAt)
     return all.filter((d) => scopeIds.includes(d.memberId)).slice(0, 8)
   }, [activeId, members.length])
+
+  // 提醒概览
+  const t0 = today()
+  const activePlans = useLiveQuery(async () => {
+    const all = await db.medPlans.where('active').equals(1).toArray()
+    all.sort((a, b) => a.createdAt - b.createdAt)
+    return all
+  }, [])
+  const logsToday = useLiveQuery(() => db.medLogs.where('date').equals(t0).toArray(), [])
+  const nextReminder = useLiveQuery(async () => {
+    const all = await db.reminders.where('done').equals(0).toArray()
+    const up = all.filter((r) => r.date >= t0).sort((a, b) => a.date.localeCompare(b.date))
+    return up[0]
+  }, [])
+  const todayPlans: MedPlan[] = (activePlans ?? []).filter((p) => p.startDate <= t0 && planEndDate(p) >= t0)
+  const medTotal = todayPlans.reduce((s, p) => s + p.times.length, 0)
+  const medTaken = (logsToday ?? []).filter((l) =>
+    todayPlans.some((p) => p.id === l.planId && p.times.includes(l.time)),
+  ).length
 
   if (!ready) return null
 
@@ -85,6 +113,43 @@ export default function HomePage() {
               </div>
             </Link>
           </div>
+
+          {/* 今日提醒 */}
+          {((activePlans?.length ?? 0) > 0 || nextReminder) && (
+            <div className="mx-4 mt-3">
+              <Link
+                to="/reminders"
+                className="block rounded-2xl bg-white p-4 shadow-sm active:bg-stone-100"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-[15px] font-semibold">
+                    <Bell size={16} className="text-teal-600" /> 今日提醒
+                  </span>
+                  {medTotal > 0 && (
+                    <span className="text-xs text-stone-400">
+                      今日用药 {medTaken}/{medTotal} 已服
+                    </span>
+                  )}
+                </div>
+                {medTotal > 0 && (
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-stone-100">
+                    <div
+                      className="h-full rounded-full bg-teal-500"
+                      style={{ width: `${Math.round((medTaken / medTotal) * 100)}%` }}
+                    />
+                  </div>
+                )}
+                {nextReminder && (
+                  <div className="mt-2 truncate text-xs text-stone-500">
+                    <span className={nextReminder.date < t0 ? 'text-rose-500' : ''}>
+                      {nextReminder.date === t0 ? '今天' : nextReminder.date === addDays(t0, 1) ? '明天' : nextReminder.date}
+                    </span>{' '}
+                    · {nextReminder.kind}·{nextReminder.title}
+                  </div>
+                )}
+              </Link>
+            </div>
+          )}
 
           {/* 最近就诊 */}
           <Section title="最近就诊" moreTo="/visits" moreText="全部就诊">

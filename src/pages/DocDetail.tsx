@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ExternalLink, Loader2, Maximize2, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import { ExternalLink, Loader2, Maximize2, Pencil, Pill, Sparkles, Trash2 } from 'lucide-react'
 import { db, getSetting, VISIT_TYPE_STYLE } from '../db'
-import { fmtDate, fmtDateTime, fmtMoney } from '../lib/format'
+import { fmtDate, fmtDateTime, fmtMoney, today } from '../lib/format'
 import {
   AiConfig,
   DEFAULT_AI,
@@ -11,6 +11,7 @@ import {
   interpretDocument,
   MAX_INTERPRET_IMAGES,
 } from '../lib/ai'
+import { defaultTimes, parseDays, parseTimesPerDay } from '../lib/medParse'
 import { PageHeader, toast } from '../components/ui'
 import { FileStrip, FullscreenViewer, MainPreview } from '../components/doc'
 
@@ -38,6 +39,34 @@ export default function DocDetailPage() {
         <div className="py-16 text-center text-sm text-stone-400">单据不存在或已删除</div>
       </div>
     )
+  }
+
+  /** 从识别出的药品一键生成用药计划 */
+  const generatePlans = async () => {
+    const meds = doc.aiMeta?.medications ?? []
+    if (!meds.length || !doc.id) return
+    const existed = await db.medPlans.where('sourceDocId').equals(doc.id).count()
+    if (existed > 0 && !confirm('这张单据已生成过用药计划，再次生成会重复创建。继续吗？')) return
+    let created = 0
+    for (const m of meds) {
+      const n = parseTimesPerDay(m.frequency) ?? 3
+      await db.medPlans.add({
+        memberId: doc.memberId,
+        name: m.name,
+        dosage: m.dosage,
+        timing: m.timing,
+        timesPerDay: n,
+        times: defaultTimes(n),
+        startDate: today(),
+        days: parseDays(m.duration) ?? 7,
+        sourceDocId: doc.id,
+        note: m.frequency,
+        active: 1,
+        createdAt: Date.now(),
+      })
+      created++
+    }
+    toast(`已生成 ${created} 个用药计划，请到「提醒」页核对每日时间`)
   }
 
   const imageFileIds = doc.fileIds // 查看器内对非图片附件做降级提示
@@ -262,7 +291,12 @@ export default function DocDetailPage() {
                     </div>
                   ))}
                 </div>
-                <p className="mt-2 text-xs text-stone-400">M3 版本起可基于此一键生成用药提醒计划</p>
+                <button
+                  onClick={generatePlans}
+                  className="mt-3 flex items-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-700 active:bg-teal-100"
+                >
+                  <Pill size={14} /> 一键生成用药计划
+                </button>
               </div>
             )}
             {(doc.aiMeta.indicators?.length ?? 0) > 0 && (
