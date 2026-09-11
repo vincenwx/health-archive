@@ -79,23 +79,42 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
   })
 }
 
-async function chatCompletion(cfg: AiConfig, messages: unknown[], maxTokens?: number): Promise<string> {
+async function chatCompletion(
+  cfg: AiConfig,
+  messages: unknown[],
+  maxTokens?: number,
+  thinkingDisabled = false,
+): Promise<string> {
   if (!cfg.apiKey) throw new Error('未配置 API Key')
   const url = `${cfg.baseUrl.replace(/\/+$/, '')}/chat/completions`
-  let res: Response
-  try {
-    res = await fetch(url, {
+  const buildBody = (withThinking: boolean) =>
+    JSON.stringify({
+      model: cfg.model,
+      messages,
+      temperature: 0.1,
+      ...(maxTokens ? { max_tokens: maxTokens } : {}),
+      ...(withThinking ? { thinking: { type: 'disabled' } } : {}),
+    })
+  const send = (body: string) =>
+    fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.apiKey}` },
-      body: JSON.stringify({
-        model: cfg.model,
-        messages,
-        temperature: 0.1,
-        ...(maxTokens ? { max_tokens: maxTokens } : {}),
-      }),
+      body,
     })
+
+  let res: Response
+  try {
+    res = await send(buildBody(thinkingDisabled))
   } catch {
     throw new Error('网络请求失败（请检查网络或接口地址是否支持浏览器直连）')
+  }
+  // 个别模型不认识 thinking 参数时自动去掉重试
+  if (!res.ok && res.status === 400 && thinkingDisabled) {
+    try {
+      res = await send(buildBody(false))
+    } catch {
+      throw new Error('网络请求失败（请检查网络或接口地址是否支持浏览器直连）')
+    }
   }
   if (!res.ok) {
     const t = await res.text().catch(() => '')
@@ -174,7 +193,8 @@ export async function interpretDocument(
       { role: 'system', content: INTERPRET_SYSTEM },
       { role: 'user', content },
     ],
-    2000,
+    6000,
+    true, // 关闭深度思考：正文额度不被推理占用，归纳整理任务也不需要
   )
   return parseInterpretation(text)
 }
