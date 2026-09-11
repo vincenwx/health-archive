@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
-import { CalendarPlus, Bell, Camera, ChevronRight, UserPlus } from 'lucide-react'
+import { BarChart3, Bell, CalendarPlus, Camera, ChevronRight, UserPlus } from 'lucide-react'
 import {
   db,
   getSetting,
@@ -110,6 +110,30 @@ export default function HomePage() {
               <div>
                 <div className="text-[15px] font-medium">记就诊</div>
                 <div className="text-xs text-stone-400">门诊 / 体检 / 住院</div>
+              </div>
+            </Link>
+            <Link
+              to="/stats"
+              className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm active:bg-stone-100"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
+                <BarChart3 size={20} />
+              </div>
+              <div>
+                <div className="text-[15px] font-medium">统计分析</div>
+                <div className="text-xs text-stone-400">花费 / 指标 / 时间线</div>
+              </div>
+            </Link>
+            <Link
+              to="/reminders"
+              className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm active:bg-stone-100"
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
+                <Bell size={20} />
+              </div>
+              <div>
+                <div className="text-[15px] font-medium">用药提醒</div>
+                <div className="text-xs text-stone-400">打卡 / 日历导出</div>
               </div>
             </Link>
           </div>
