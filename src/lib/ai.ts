@@ -67,8 +67,9 @@ const SYSTEM_PROMPT = `你是医疗单据信息提取助手。请从用户提供
 1. 单据中没有的信息直接省略该字段，不要编造。
 2. 图片可能是多页单据中的一页（如病历、报告、发票各一张），只提取当前这张图片上的内容。
 3. medications 只在处方、用药指导中提取；indicators 只在化验单中提取。
-4. 金额去掉货币符号和千分位，只保留数字。
-5. 只输出 JSON 本身。`
+4. indicators 的 name 必须使用标准检验项目名称（如"空腹血糖""总胆固醇""高密度脂蛋白胆固醇""促甲状腺激素"），同一种项目在不同报告里保持完全一致的命名，便于跨时间对比。
+5. 金额去掉货币符号和千分位，只保留数字。
+6. 只输出 JSON 本身。`
 
 export function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
