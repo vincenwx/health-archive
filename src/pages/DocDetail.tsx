@@ -183,17 +183,28 @@ export default function DocDetailPage() {
               <button
                 onClick={interpret}
                 disabled={interpreting}
-                className="text-xs text-teal-600 active:opacity-70 disabled:opacity-60"
+                className="flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700 active:bg-teal-200 disabled:opacity-60"
               >
-                重新解读
+                {interpreting && <Loader2 size={12} className="animate-spin" />}
+                {interpreting ? '解读中…' : '重新解读'}
               </button>
             )}
           </div>
           {doc.aiMeta?.interpretation ? (
             <>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-stone-700">
+              <p
+                className={`mt-2 whitespace-pre-wrap text-sm leading-6 text-stone-700 ${
+                  interpreting ? 'opacity-40' : ''
+                }`}
+              >
                 {doc.aiMeta.interpretation}
               </p>
+              {interpreting && (
+                <div className="mt-2 flex items-center gap-2 text-xs text-teal-700">
+                  <Loader2 size={13} className="animate-spin" />
+                  正在重新解读全部内容，约需 10~30 秒…
+                </div>
+              )}
               <p className="mt-2 text-xs text-stone-400">
                 生成于 {doc.aiMeta.interpretationAt ? fmtDateTime(doc.aiMeta.interpretationAt) : '—'} · AI
                 归纳整理，仅供参考，请以医生意见为准

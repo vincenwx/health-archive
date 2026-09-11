@@ -144,7 +144,7 @@ const INTERPRET_SYSTEM = `你是面向普通家庭的就医解读与整理助手
 4. 不要罗列与解读无关的原始数据。
 5. 结尾固定单独一行：「以上为 AI 归纳整理，仅供参考，请以医生意见为准。」
 6. 全文控制在 800 字以内。
-只输出 JSON：{"interpretation": "解读全文，段落间用\\n\\n分隔"}`
+7. 直接输出解读正文本身：不要 JSON、不要代码块、不要"interpretation"等字段名、不要任何开场白或收尾说明。段落之间空一行。`
 
 /** 生成单据的大白话解读（多页单据把所有图片一起发给模型综合解读） */
 export async function interpretDocument(
@@ -173,21 +173,27 @@ export async function interpretDocument(
   return parseInterpretation(text)
 }
 
+/** 清洗解读输出：剥掉可能的代码块/字段名/引号包装，把字面 \n 转成真实换行 */
 function parseInterpretation(text: string): string {
   let s = text.trim()
-  const fenced = s.match(/```(?:json)?\s*([\s\S]*?)```/)
+  const fenced = s.match(/```(?:json|markdown)?\s*([\s\S]*?)```/)
   if (fenced) s = fenced[1].trim()
   const brace = s.match(/\{[\s\S]*\}/)
   if (brace) {
     try {
       const raw = JSON.parse(brace[0]) as { interpretation?: unknown }
       const out = typeof raw.interpretation === 'string' ? raw.interpretation.trim() : ''
-      if (out) return out
+      if (out) s = out
     } catch {
-      /* 落到原文返回 */
+      /* 解析失败就按原文清洗 */
     }
   }
-  return text.trim()
+  // 模型偶尔输出 "interpretation: ..." 的松散格式
+  s = s.replace(/^\s*"?interpretation"?\s*[:：]?\s*/i, '')
+  s = s.replace(/^["'`](.*)["'`]$/s, '$1').trim()
+  // 字面 \n 转真实换行（未按 JSON 输出时的兜底）
+  if (!s.includes('\n')) s = s.replace(/\\n/g, '\n')
+  return s.trim()
 }
 
 function pickString(v: unknown): string | undefined {
