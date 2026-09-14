@@ -80,7 +80,7 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
   })
 }
 
-async function chatCompletion(
+export async function chatCompletion(
   cfg: AiConfig,
   messages: unknown[],
   maxTokens?: number,

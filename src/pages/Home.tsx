@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
-import { BarChart3, Bell, CalendarPlus, Camera, ChevronRight, UserPlus } from 'lucide-react'
+import { BarChart3, Bell, CalendarPlus, Camera, ChevronRight, MessageCircle, UserPlus } from 'lucide-react'
 import {
   db,
   getSetting,
@@ -86,6 +86,20 @@ export default function HomePage() {
         </div>
       ) : (
         <>
+          {/* 问档案入口 */}
+          <div className="mx-4 mt-3">
+            <Link
+              to="/ask"
+              className="flex items-center gap-3 rounded-2xl border border-teal-200 bg-white px-4 py-3 shadow-sm active:bg-stone-100"
+            >
+              <MessageCircle size={18} className="shrink-0 text-teal-600" />
+              <span className="min-w-0 flex-1 truncate text-sm text-stone-400">
+                问档案：血糖趋势？今年花了多少？
+              </span>
+              <ChevronRight size={16} className="shrink-0 text-stone-300" />
+            </Link>
+          </div>
+
           {/* 快捷操作 */}
           <div className="mx-4 mt-3 grid grid-cols-2 gap-3">
             <Link

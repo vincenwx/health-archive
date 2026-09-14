@@ -12,6 +12,7 @@ import RemindersPage from '../pages/Reminders'
 import MedPlanFormPage from '../pages/MedPlanForm'
 import ReminderFormPage from '../pages/ReminderForm'
 import StatsPage from '../pages/Stats'
+import AskPage from '../pages/Ask'
 import SettingsPage from '../pages/Settings'
 
 const NAV_ITEMS = [
@@ -65,6 +66,7 @@ export function Layout() {
           <Route path="/reminders/:id/edit" element={<ReminderFormPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/stats" element={<StatsPage />} />
+          <Route path="/ask" element={<AskPage />} />
           <Route path="*" element={<HomePage />} />
         </Routes>
       </div>
