@@ -132,6 +132,13 @@ export async function autoBackupToSavedDir(): Promise<{ ok: boolean; reason: str
   return { ok: true, reason: filename }
 }
 
+export interface ImportResult {
+  members: number
+  visits: number
+  docs: number
+  files: number
+}
+
 export async function importBackup(file: File): Promise<ImportResult> {
   const bytes = new Uint8Array(await file.arrayBuffer())
   const entries = await unzipAsync(bytes)
