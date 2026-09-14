@@ -4,6 +4,7 @@ import { HashRouter } from 'react-router-dom'
 import { getSetting, type SecurityConfig } from './db'
 import { LockScreen } from './pages/LockScreen'
 import { Layout } from './components/Layout'
+import { autoBackupToSavedDir } from './lib/backup'
 
 const UNLOCK_KEY = 'fha-unlocked'
 
@@ -25,6 +26,13 @@ export default function App() {
   // 请求持久化存储，降低浏览器自动清理数据的风险
   useEffect(() => {
     navigator.storage?.persist?.().catch(() => {})
+  }, [])
+
+  // 电脑端自动备份（开启了文件夹授权后，每次打开静默写入一次）
+  useEffect(() => {
+    autoBackupToSavedDir()
+      .then((r) => r.ok && console.info('[自动备份] 已写入', r.reason))
+      .catch((e) => console.warn('[自动备份] 失败', e))
   }, [])
 
   // 无操作自动锁定

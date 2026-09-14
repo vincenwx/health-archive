@@ -27,6 +27,7 @@ import { fmtDateTime, fmtSize } from '../lib/format'
 import { PBKDF2_ITERATIONS, hashPassword, isSecureEnough, newId, randomSalt, verifyPassword } from '../lib/crypto'
 import { exportBackup, importBackup } from '../lib/backup'
 import { DEFAULT_AI, testAiConnection, type AiConfig } from '../lib/ai'
+import { autoBackupToSavedDir, type AutoDirHandle } from '../lib/backup'
 import { blobToArrayBuffer } from '../lib/image'
 import { today } from '../lib/format'
 import { Field, MemberAvatar, PageHeader, inputCls, toast } from '../components/ui'
@@ -600,13 +601,62 @@ function BackupSection() {
   const lastBackupAt = useLiveQuery(() => getSetting<number | null>('lastBackupAt', null), [])
   const lastRestoreAt = useLiveQuery(() => getSetting<number | null>('lastRestoreAt', null), [])
   const [usage, setUsage] = useState<string | null>(null)
+  const autoSupported = typeof window.showDirectoryPicker === 'function'
+  const [autoDir, setAutoDir] = useState<{ name: string; perm: string } | null>(null)
+  const [autoOn, setAutoOn] = useState(false)
 
   useEffect(() => {
     navigator.storage
       ?.estimate?.()
       .then((e) => e.usage != null && setUsage(fmtSize(e.usage)))
       .catch(() => {})
-  }, [])
+    ;(async () => {
+      if (!autoSupported) return
+      const row = await db.settings.get('autoBackupDir')
+      const h = row?.value as unknown as AutoDirHandle | undefined
+      if (!h) return
+      setAutoOn(true)
+      const perm = await h.queryPermission({ mode: 'readwrite' })
+      setAutoDir({ name: h.name, perm })
+    })()
+  }, [autoSupported])
+
+  const enableAuto = async () => {
+    try {
+      const h = await window.showDirectoryPicker?.({ mode: 'readwrite' })
+      if (!h) return
+      await db.settings.put({ key: 'autoBackupDir', value: h })
+      const perm = await h.queryPermission({ mode: 'readwrite' })
+      setAutoDir({ name: h.name, perm })
+      setAutoOn(true)
+      const r = await autoBackupToSavedDir()
+      toast(
+        r.ok ? '自动备份已开启，并写入了一份完整备份' : '已开启，但本次写入未完成：' + r.reason,
+        r.ok ? 'ok' : 'err',
+      )
+    } catch {
+      /* 用户取消了选择器 */
+    }
+  }
+
+  const disableAuto = async () => {
+    await db.settings.delete('autoBackupDir')
+    setAutoOn(false)
+    setAutoDir(null)
+    toast('自动备份已关闭')
+  }
+
+  const regrant = async () => {
+    const row = await db.settings.get('autoBackupDir')
+    const h = row?.value as unknown as AutoDirHandle | undefined
+    if (!h) return
+    const perm = await h.requestPermission({ mode: 'readwrite' })
+    setAutoDir({ name: h.name, perm })
+    if (perm === 'granted') {
+      const r = await autoBackupToSavedDir()
+      toast(r.ok ? '授权成功，已写入最新备份' : '仍未完成：' + r.reason)
+    }
+  }
 
   const doExport = async () => {
     setBusy('export')
@@ -680,6 +730,43 @@ function BackupSection() {
             />
           </label>
         </div>
+
+        {autoSupported && (
+          <div className="rounded-xl border border-stone-100 bg-stone-50 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-stone-700">电脑自动备份</span>
+              <span className={`text-xs ${autoOn ? 'text-emerald-600' : 'text-stone-400'}`}>
+                {autoOn ? '已开启' : '未开启'}
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-stone-400">
+              {autoOn
+                ? `每次打开应用，自动把完整备份写入「${autoDir?.name ?? ''}」文件夹（覆盖上一次）。`
+                : '开启后选择电脑上的一个文件夹，每次打开应用自动写入完整备份（仅电脑 Chrome/Edge 支持，手机不支持）。'}
+            </p>
+            {autoOn && autoDir?.perm === 'prompt' && (
+              <div className="mt-1 text-xs text-amber-600">浏览器重启后需要重新授权一次。</div>
+            )}
+            <div className="mt-2 flex gap-2">
+              {(!autoOn || autoDir?.perm === 'prompt') && (
+                <button
+                  onClick={autoDir?.perm === 'prompt' ? regrant : enableAuto}
+                  className="rounded-xl bg-teal-600 px-4 py-2 text-sm font-medium text-white active:bg-teal-700"
+                >
+                  {autoDir?.perm === 'prompt' ? '重新授权' : '选择文件夹并开启'}
+                </button>
+              )}
+              {autoOn && (
+                <button
+                  onClick={disableAuto}
+                  className="rounded-xl border border-stone-200 px-4 py-2 text-sm text-stone-600 active:bg-stone-100"
+                >
+                  关闭自动备份
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </section>
   )

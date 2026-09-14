@@ -1,4 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BarChart3, Bell, CalendarPlus, Camera, ChevronRight, MessageCircle, UserPlus } from 'lucide-react'
 import {
@@ -52,12 +53,43 @@ export default function HomePage() {
     todayPlans.some((p) => p.id === l.planId && p.times.includes(l.time)),
   ).length
 
+  // 备份提醒
+  const lastBackupAt = useLiveQuery(() => getSetting<number | null>('lastBackupAt', null), [])
+  const docsCount = useLiveQuery(() => db.docs.count(), [])
+  const [backupBannerOff, setBackupBannerOff] = useState(false)
+  const backupDays = lastBackupAt == null ? null : Math.floor((Date.now() - lastBackupAt) / 86400000)
+  const needBackup =
+    !backupBannerOff && (docsCount ?? 0) > 2 && (backupDays == null || backupDays >= 30)
+
   if (!ready) return null
 
   return (
     <div>
       <PageHeader title="家庭健康档案" />
       <p className="px-4 pt-1 text-right text-[10px] text-stone-300">{APP_VERSION}</p>
+
+          {needBackup && (
+            <div className="mx-4 mt-2 flex items-center gap-2 rounded-2xl bg-amber-50 p-3 text-xs leading-5 text-amber-700">
+              <span className="flex-1">
+                {backupDays == null
+                  ? '还没有备份过，建议立即导出一份备份保存到云盘或电脑'
+                  : `已经 ${backupDays} 天没有备份了，建议导出一份`}
+              </span>
+              <Link
+                to="/settings"
+                className="shrink-0 rounded-full bg-amber-500 px-3 py-1.5 font-medium text-white"
+              >
+                去备份
+              </Link>
+              <button
+                onClick={() => setBackupBannerOff(true)}
+                className="shrink-0 px-1 text-amber-400"
+                aria-label="关闭"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
       {/* 成员切换 */}
       <div className="pt-2">

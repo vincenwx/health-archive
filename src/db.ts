@@ -2,7 +2,7 @@ import Dexie, { type Table } from 'dexie'
 
 export const APP_NAME = 'family-health-archive'
 export const APP_TITLE = '家庭健康档案'
-export const APP_VERSION = '0.6.1 (M5)'
+export const APP_VERSION = '1.0.0'
 export const SCHEMA_VERSION = 1
 
 // ---------- 实体类型 ----------

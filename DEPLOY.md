@@ -1,65 +1,34 @@
 # 部署说明
 
-应用是纯静态 PWA，构建产物就是 `dist/` 文件夹里的静态文件。两种方式：
+应用是纯静态 PWA，`npm run build` 的产物 `dist/` 即可部署到任意静态托管。
 
----
+## 现行方案：GitHub Pages（已上线）
 
-## 方式 A：EdgeOne Pages（推荐，免费、国内访问快）
+- 仓库：`vincenwx/health-archive`（公开仓库）
+- `main` 分支：源码；`gh-pages` 分支：构建产物（Pages 来源分支）
+- **正式地址**：https://vincenwx.github.io/health-archive/
 
-[EdgeOne Pages](https://edgeone.ai/zh/products/pages) 是腾讯云的静态托管平台（"国内版 Vercel"），免费额度足够个人使用，国内访问流畅，自动配好 HTTPS（PWA 必需）。
-
-### 首次部署（最简单：直接上传）
-
-1. 注册 / 登录腾讯云，进入 [EdgeOne Pages 控制台](https://console.cloud.tencent.com/edgeone)
-2. 本地执行 `npm run build`，得到 `dist/` 文件夹
-3. 在 Pages 里选择「直接上传 / Makers Drop」，把 `dist` 文件夹整个拖进去
-4. 部署完成后得到一个 `https://xxxx.edgeone.app` 的网址，手机电脑都能打开
-
-### 首次部署（更省心：连 Git 仓库，以后自动部署）
-
-1. 把本项目推到 GitHub（私有仓库即可）
-2. EdgeOne Pages 里「连接 Git 仓库」→ 选中本仓库 → 构建命令 `npm run build`，输出目录 `dist`
-3. 以后每次 push 代码，平台自动构建更新
-
-### 日常更新
-
-改完代码 → `npm run build` → 重新上传 `dist`（或 push 到 GitHub 触发自动部署）。已安装的 PWA 会自动更新到新版本。
-
-### 装到手机上
-
-- **iPhone**：用 Safari 打开网址 → 分享按钮 →「添加到主屏幕」→ 从主屏幕图标打开使用（必须做这一步，既是 APP 体验，也避免 Safari 清理数据）
-- **鸿蒙 / 安卓**：浏览器打开网址 → 菜单 →「添加到主屏幕」或「安装应用」
-
----
-
-## 访问口令：两道口的区别（重要）
-
-| 层面 | 保护什么 | 在哪设置 |
-|---|---|---|
-| 部署网址本身 | 网址是公开的，知道的人都能加载**应用外壳**，但里面**没有任何数据**（数据只存在各设备浏览器里），所以泄露网址不泄露隐私 | 无需设置，天然安全 |
-| 应用内访问口令 | 防止家人/同事拿到你手机后随手翻看本机档案 | 应用内 设置 → 安全 → 开启访问口令 |
-
-如果将来想给部署网址也加一层门禁，可在 EdgeOne 控制台配置访问控制（或绑定自己域名 + Cloudflare Access），对个人使用通常没必要。
-
-## 数据安全小结
-
-- 托管平台上只有代码，没有你的任何数据；平台故障最多导致"新设备暂时装不了"，已安装的 PWA 离线照常可用
-- 数据出设备的唯一环节（M2 起的 AI 识别）会把单据图片发给智谱 API，密钥只存你本地
-- 备份 zip 建议存到自己的云盘/电脑，注意保管
-
----
-
-## 方式 B：只在本地运行（不部署）
+### 更新流程
 
 ```bash
 npm run build
-npm run preview     # http://localhost:4173
+cd dist
+git add -A && git commit -m "deploy" && git push origin gh-pages --force
 ```
 
-- 电脑浏览器访问 `http://localhost:4173` 即可
-- 手机同一 WiFi 访问 `http://电脑IP:4173` 仅作临时查看：HTTP 局域网环境下浏览器限制较多（部分功能如访问口令、离线缓存不可用），日常使用建议走方式 A 的 HTTPS 部署
+GitHub Pages 构建约 1 分钟生效；已安装的 PWA 会在下次打开时自动更新（必要时刷新一次）。
+
+### 手机安装
+
+浏览器（建议 Edge）打开正式地址 → 菜单 →「添加到主屏幕」→ 从图标使用。**地址必须带 `/health-archive/` 路径**——从正确打开的页面上添加即可（PWA 清单已按相对路径配置）。
+
+## 备选方案
+
+- **腾讯 EdgeOne Pages**（国内 CDN，免费）：国内访问速度更好，但默认 `edgeone.cool` 域名带令牌保护（需定期重新复制阅览地址）；要无令牌的固定域名需自定义域名 + ICP 备案。此前已部署过：`health-archive-ojutbwix.edgeone.cool`
+- **自定义域名**：在 GitHub Pages（Settings → Pages → Custom domain）或 EdgeOne 绑定自有域名；EdgeOne 国内节点需 ICP 备案
+- **本地运行**：`npm run build && npm run preview`，电脑访问 `http://localhost:4173`（仅临时调试用，HTTP 环境下口令/PWA 受限）
 
 ## 注意
 
-- 每台设备的数据是独立的（纯本地设计），家人共用一台设备最合适；各自有设备时用「导出/导入备份」迁移
-- 更新版本后如果页面表现异常，下拉刷新一次即可加载新版（或关掉 PWA 重新打开）
+- 每台设备的数据相互独立；换设备/换域名用「导出备份 → 导入恢复」迁移
+- 版本更新后如页面无变化，刷新一至两次即可（离线缓存切换）
