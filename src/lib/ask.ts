@@ -19,6 +19,8 @@ export interface AskContext {
   visitIds: Set<number>
   planIds: Set<number>
   reminderIds: Set<number>
+  docMeta: Map<number, { title: string; date: string }>
+  visitMeta: Map<number, { title: string; date: string }>
 }
 
 const trim = (s: string | undefined, n: number) => (s ? (s.length > n ? s.slice(0, n) + '…' : s) : '')
@@ -38,6 +40,8 @@ export async function buildAskContext(memberId: number | 'all'): Promise<AskCont
   const visitIds = new Set<number>()
   const planIds = new Set<number>()
   const reminderIds = new Set<number>()
+  const docMeta = new Map<number, { title: string; date: string }>()
+  const visitMeta = new Map<number, { title: string; date: string }>()
 
   const lines: string[] = []
   lines.push(`【家庭成员】${members.map((m) => `${m.name}(${m.relation})`).join('、')}`)
@@ -48,6 +52,7 @@ export async function buildAskContext(memberId: number | 'all'): Promise<AskCont
   for (const v of vSorted) {
     if (v.id == null) continue
     visitIds.add(v.id)
+    visitMeta.set(v.id, { title: `${v.type}·${trim(v.hospital, 12)}`, date: v.date })
     lines.push(
       `V${v.id} | ${v.date} | ${v.type} | ${trim(v.hospital, 12)}${v.department ? ' ' + trim(v.department, 10) : ''} | 诊断:${trim(v.diagnosis, 24) || '未填'}`,
     )
@@ -59,6 +64,7 @@ export async function buildAskContext(memberId: number | 'all'): Promise<AskCont
   for (const d of dSorted) {
     if (d.id == null) continue
     docIds.add(d.id)
+    docMeta.set(d.id, { title: d.title, date: d.docDate })
     const meds = (d.aiMeta?.medications ?? []).slice(0, 4).map((m) => `${m.name}${m.dosage ?? ''}`).join('、')
     const inds = (d.aiMeta?.indicators ?? [])
       .slice(0, 6)
@@ -119,7 +125,15 @@ export async function buildAskContext(memberId: number | 'all'): Promise<AskCont
     }
   }
 
-  return { text: lines.join('\n'), docIds, visitIds, planIds, reminderIds }
+  return {
+    text: lines.join('\n'),
+    docIds,
+    visitIds,
+    planIds,
+    reminderIds,
+    docMeta,
+    visitMeta,
+  }
 }
 
 export type AskRole = 'user' | 'assistant'

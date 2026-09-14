@@ -113,15 +113,7 @@ export default function AskPage() {
               </div>
             </div>
           ) : (
-            <div key={i} className="flex justify-start">
-              <div
-                className={`max-w-[90%] whitespace-pre-wrap rounded-2xl rounded-bl-sm px-3.5 py-2.5 text-sm leading-6 ${
-                  m.error ? 'bg-rose-50 text-rose-600' : 'bg-white text-stone-700 shadow-sm'
-                }`}
-              >
-                {renderContent(m.content, contextRef.current)}
-              </div>
-            </div>
+            <AssistantBubble key={i} content={m.content} error={m.error} ctx={contextRef.current} />
           ),
         )}
 
@@ -189,4 +181,97 @@ function renderContent(content: string, ctx: AskContext | null) {
       )
     return <span key={i}>{p}</span>
   })
+}
+
+/** 从回答中拆出正文与引用的记录编号（"来源："行并入编号列表，不再单独显示） */
+function splitSources(content: string, ctx: AskContext | null): { body: string; ids: string[] } {
+  const ids: string[] = []
+  const exists = (id: string) => {
+    const kind = id[0]
+    const n = Number(id.slice(1))
+    if (!ctx) return false
+    if (kind === 'D') return ctx.docIds.has(n)
+    if (kind === 'V') return ctx.visitIds.has(n)
+    if (kind === 'P') return ctx.planIds.has(n)
+    return ctx.reminderIds.has(n)
+  }
+  for (const t of content.matchAll(/[DVPR]\d+/g)) {
+    const id = t[0]
+    if (exists(id) && !ids.includes(id)) ids.push(id)
+  }
+  const body = content
+    .split('\n')
+    .filter((l) => !/^\s*来源\s*[:：]/.test(l))
+    .join('\n')
+    .trim()
+  return { body, ids }
+}
+
+function AssistantBubble({
+  content,
+  error,
+  ctx,
+}: {
+  content: string
+  error?: boolean
+  ctx: AskContext | null
+}) {
+  const { body, ids } = error ? { body: content, ids: [] as string[] } : splitSources(content, ctx)
+  return (
+    <div className="flex justify-start">
+      <div
+        className={`max-w-[90%] rounded-2xl rounded-bl-sm px-3.5 py-2.5 text-sm leading-6 ${
+          error ? 'bg-rose-50 text-rose-600' : 'bg-white text-stone-700 shadow-sm'
+        }`}
+      >
+        <div className="whitespace-pre-wrap">{renderContent(body, ctx)}</div>
+        {ids.length > 0 && (
+          <div className="mt-2 border-t border-stone-100 pt-2">
+            <div className="mb-1.5 text-[11px] text-stone-400">相关记录（点击直达）</div>
+            <div className="flex flex-col gap-1">
+              {ids.map((id) => {
+                const kind = id[0]
+                const n = Number(id.slice(1))
+                if (kind === 'D') {
+                  const info = ctx?.docMeta.get(n)
+                  return (
+                    <Link
+                      key={id}
+                      to={`/docs/${n}`}
+                      className="flex items-center gap-1.5 rounded-lg bg-stone-50 px-2 py-1.5 text-xs text-stone-600 active:bg-stone-100"
+                    >
+                      📄 <span className="min-w-0 flex-1 truncate">{info?.title ?? `单据 ${n}`}</span>
+                      <span className="shrink-0 text-[10px] text-stone-400">{info?.date}</span>
+                    </Link>
+                  )
+                }
+                if (kind === 'V') {
+                  const info = ctx?.visitMeta.get(n)
+                  return (
+                    <Link
+                      key={id}
+                      to={`/visits/${n}`}
+                      className="flex items-center gap-1.5 rounded-lg bg-stone-50 px-2 py-1.5 text-xs text-stone-600 active:bg-stone-100"
+                    >
+                      🏥 <span className="min-w-0 flex-1 truncate">{info?.title ?? `就诊 ${n}`}</span>
+                      <span className="shrink-0 text-[10px] text-stone-400">{info?.date}</span>
+                    </Link>
+                  )
+                }
+                return (
+                  <Link
+                    key={id}
+                    to="/reminders"
+                    className="flex items-center gap-1.5 rounded-lg bg-stone-50 px-2 py-1.5 text-xs text-stone-600 active:bg-stone-100"
+                  >
+                    {kind === 'P' ? '💊' : '⏰'} <span className="flex-1">提醒/计划 {n}</span>
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
